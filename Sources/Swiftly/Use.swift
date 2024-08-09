@@ -48,7 +48,7 @@ internal struct Use: SwiftlyCommand {
 
         guard let toolchain = self.toolchain else {
             if let inUse = config.inUse {
-                SwiftlyCore.print("\(inUse) (in use)")
+                SwiftlyCore.print("\(inUse) (default)")
             }
             return
         }
@@ -72,13 +72,10 @@ internal struct Use: SwiftlyCommand {
             return
         }
 
-        guard try Swiftly.currentPlatform.use(toolchain, currentToolchain: previousToolchain) else {
-            return
-        }
         config.inUse = toolchain
         try config.save()
 
-        var message = "Set the active toolchain to \(toolchain)"
+        var message = "Set the default toolchain to \(toolchain)"
         if let previousToolchain {
             message += " (was \(previousToolchain))"
         }

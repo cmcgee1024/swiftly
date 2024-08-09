@@ -292,17 +292,6 @@ class SwiftlyTests: XCTestCase {
     func validateInUse(expected: ToolchainVersion?) async throws {
         let config = try Config.load()
         XCTAssertEqual(config.inUse, expected)
-
-        let executable = SwiftExecutable(path: Swiftly.currentPlatform.swiftlyBinDir.appendingPathComponent("swift"))
-
-        XCTAssertEqual(executable.exists(), expected != nil)
-
-        guard let expected else {
-            return
-        }
-
-        let inUseVersion = try await executable.version()
-        XCTAssertEqual(inUseVersion, expected)
     }
 
     /// Validate that all of the provided toolchains have been installed.

@@ -103,7 +103,6 @@ struct Uninstall: SwiftlyCommand {
                     try await Use.execute(toUse, &config)
                 } else {
                     // If there are no more toolchains installed, just unuse the currently active toolchain.
-                    try Swiftly.currentPlatform.unUse(currentToolchain: toolchain)
                     config.inUse = nil
                     try config.save()
                 }

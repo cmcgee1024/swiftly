@@ -54,18 +54,6 @@ public protocol Platform {
     /// If this version is in use, the next latest version will be used afterwards.
     func uninstall(_ version: ToolchainVersion) throws
 
-    /// Select the toolchain associated with the given version.
-    /// Returns whether the selection was successful.
-    func use(_ version: ToolchainVersion, currentToolchain: ToolchainVersion?) throws -> Bool
-
-    /// Clear the current active toolchain.
-    func unUse(currentToolchain: ToolchainVersion) throws
-
-    /// Get a list of snapshot builds for the platform. If a version is specified, only
-    /// return snapshots associated with the version.
-    /// This will likely have a default implementation.
-    func listAvailableSnapshots(version: String?) async -> [Snapshot]
-
     /// Get the name of the swiftly release binary.
     func getExecutableName() -> String
 

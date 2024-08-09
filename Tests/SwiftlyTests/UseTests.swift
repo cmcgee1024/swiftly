@@ -13,11 +13,6 @@ final class UseTests: SwiftlyTests {
         try await use.run()
 
         XCTAssertEqual(try Config.load().inUse, expectedVersion)
-
-        let toolchainVersion = try self.getMockedToolchainVersion(
-            at: Swiftly.currentPlatform.swiftlyBinDir.appendingPathComponent("swift")
-        )
-        XCTAssertEqual(toolchainVersion, expectedVersion)
     }
 
     /// Tests that the `use` command can switch between installed stable release toolchains.
@@ -210,100 +205,6 @@ final class UseTests: SwiftlyTests {
                     expectedVersion: toolchain
                 )
             }
-        }
-    }
-
-    /// Tests that the `use` command symlinks all of the executables provided in a toolchain and removes any existing
-    /// symlinks from the previously active toolchain.
-    func testOldSymlinksRemoved() async throws {
-        try await self.withMockedHome(homeName: Self.homeName, toolchains: Self.allToolchains) {
-            let spec = [
-                ToolchainVersion(major: 1, minor: 2, patch: 3): ["a", "b"],
-                ToolchainVersion(major: 2, minor: 3, patch: 4): ["b", "c", "d"],
-                ToolchainVersion(major: 3, minor: 4, patch: 5): ["a", "c", "d", "e"],
-            ]
-
-            for (toolchain, files) in spec {
-                try await self.installMockedToolchain(toolchain: toolchain, executables: files)
-            }
-
-            // Add an unrelated executable to the binary directory.
-            let existingFileName = "existing"
-            let existingExecutableURL = Swiftly.currentPlatform.swiftlyBinDir.appendingPathComponent(existingFileName)
-            let data = Data("hello world\n".utf8)
-            try data.write(to: existingExecutableURL)
-
-            for (toolchain, files) in spec {
-                var use = try self.parseCommand(Use.self, ["use", toolchain.name])
-                try await use.run()
-
-                // Verify that only the symlinks for the active toolchain remain.
-                let symlinks = try FileManager.default.contentsOfDirectory(
-                    atPath: Swiftly.currentPlatform.swiftlyBinDir.path
-                )
-                XCTAssertEqual(symlinks.sorted(), (files + [existingFileName]).sorted())
-
-                // Verify that any all the symlinks point to the right toolchain.
-                for file in files {
-                    guard file != existingFileName else {
-                        continue
-                    }
-                    let observedVersion = try self.getMockedToolchainVersion(
-                        at: Swiftly.currentPlatform.swiftlyBinDir.appendingPathComponent(file)
-                    )
-                    XCTAssertEqual(observedVersion, toolchain)
-                }
-            }
-        }
-    }
-
-    /// Tests that any executables that already exist in SWIFTLY_BIN_DIR.
-    func testExistingExecutablesNotOverwritten() async throws {
-        try await self.withMockedHome(homeName: Self.homeName, toolchains: []) {
-            let existingExecutables = ["a", "b", "c"]
-            let existingText = "existing"
-            for fileName in existingExecutables {
-                let existingExecutableURL = Swiftly.currentPlatform.swiftlyBinDir.appendingPathComponent(fileName)
-                let data = Data(existingText.utf8)
-                try data.write(to: existingExecutableURL)
-            }
-
-            let toolchain = ToolchainVersion(major: 7, minor: 2, patch: 3)
-            try await self.installMockedToolchain(
-                toolchain: toolchain,
-                executables: ["a", "b", "c", "d", "e"]
-            )
-
-            var use = try self.parseCommand(Use.self, ["use", toolchain.name])
-            let nOutput = try await use.runWithMockedIO(input: ["n"])
-
-            for exec in existingExecutables {
-                // Ensure we were prompted for each existing executable.
-                XCTAssert(nOutput.contains(where: { $0.contains(exec) }))
-
-                // Ensure files were not overwritten.
-                let existingExecutableURL = Swiftly.currentPlatform.swiftlyBinDir.appendingPathComponent(exec)
-                let contents = try String(contentsOf: existingExecutableURL, encoding: .utf8)
-                XCTAssertEqual(contents, existingText)
-            }
-
-            let nConfig = try Config.load()
-            XCTAssertEqual(nConfig.inUse, nil)
-
-            let yOutput = try await use.runWithMockedIO(input: ["y"])
-
-            // Ensure we were prompted for each existing executable.
-            for exec in existingExecutables {
-                XCTAssert(yOutput.contains(where: { $0.contains(exec) }))
-
-                // Ensure files were overwritten.
-                let existingExecutableURL = Swiftly.currentPlatform.swiftlyBinDir.appendingPathComponent(exec)
-                let contents = try String(contentsOf: existingExecutableURL, encoding: .utf8)
-                XCTAssertNotEqual(contents, existingText)
-            }
-
-            let yConfig = try Config.load()
-            XCTAssertEqual(yConfig.inUse, toolchain)
         }
     }
 
