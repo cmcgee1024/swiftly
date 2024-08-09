@@ -98,6 +98,9 @@ public protocol Platform {
 
     /// Get the user's current login shell
     func getShell() async throws -> String
+
+    /// Proxy through the invocation of the provided command to the specified toolchain
+    func proxy(_ toolchain: ToolchainVersion, _ command: String, _ arguments: [String]) async throws
 }
 
 extension Platform {
@@ -127,6 +130,10 @@ extension Platform {
 
 #if os(macOS) || os(Linux)
     public func runProgram(_ args: String..., quiet: Bool = false) throws {
+        try self.runProgram([String](args), quiet: quiet)
+    }
+
+    public func runProgram(_ args: [String], quiet: Bool = false) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = args
@@ -150,6 +157,10 @@ extension Platform {
     }
 
     public func runProgramOutput(_ program: String, _ args: String...) async throws -> String? {
+        try await self.runProgramOutput(program, [String](args))
+    }
+
+    public func runProgramOutput(_ program: String, _ args: [String]) async throws -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = [program] + args
@@ -202,6 +213,7 @@ extension Platform {
 
         return true
     }
+
 #endif
 }
 

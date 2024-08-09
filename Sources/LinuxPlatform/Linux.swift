@@ -605,5 +605,10 @@ public struct Linux: Platform {
         return "/bin/bash"
     }
 
+    public func proxy(_ toolchain: ToolchainVersion, _ command: String, _ arguments: [String]) async throws {
+        let cmd = self.swiftlyToolchainsDir.appendingPathComponent("\(toolchain.name)/usr/bin/\(command)")
+        try runProgram([cmd.path] + arguments)
+    }
+
     public static let currentPlatform: any Platform = Linux()
 }

@@ -226,5 +226,10 @@ public struct MacOS: Platform {
         return "/bin/zsh"
     }
 
+    public func proxy(_ toolchain: ToolchainVersion, _ command: String, _ arguments: [String]) async throws {
+        let cmd = self.swiftlyToolchainsDir.appendingPathComponent("\(toolchain.identifier).xctoolchain/usr/bin/\(command)")
+        try runProgram([cmd.path] + arguments)
+    }
+
     public static let currentPlatform: any Platform = MacOS()
 }
