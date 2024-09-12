@@ -1,7 +1,6 @@
-// swift-tools-version:5.10
+// swift-tools-version: 999.0.0
 
-import Foundation
-import PackageDescription
+@_spi(ExperimentalTraits) import PackageDescription
 
 let swiftlyTarget: Target = .executableTarget(
     name: "Swiftly",
@@ -81,13 +80,13 @@ let package = Package(
 
 #if os(Linux)
 
-package.dependencies.append(.package(path: "libarchive"))
+package.dependencies.append(.package(path: "libarchive", traits: ["ArchiveZ"]))
 package.targets.append(
     .target(
         name: "LinuxPlatform",
         dependencies: [
             .target(name: "SwiftlyCore"),
-            .product(name: "archive-devel", package: "libarchive"),
+            .product(name: "archive", package: "libarchive"),
         ]
     )
 )
