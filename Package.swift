@@ -80,7 +80,7 @@ let package = Package(
 
 #if os(Linux)
 
-package.dependencies.append(.package(path: "libarchive", traits: ["ArchiveZ"]))
+package.dependencies.append(.package(path: "libarchive", traits: ["Z"])) // We need the zlib trait to decompress the toolchain tar.gz files
 package.targets.append(
     .target(
         name: "LinuxPlatform",
