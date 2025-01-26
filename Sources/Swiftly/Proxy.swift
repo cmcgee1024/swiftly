@@ -1,3 +1,4 @@
+import CommandLine
 import Foundation
 import SwiftlyCore
 
@@ -57,8 +58,8 @@ public enum Proxy {
             }
 
             try await Swiftly.currentPlatform.proxy(toolchain, binName, Array(CommandLine.arguments[1...]))
-        } catch let terminated as RunProgramError {
-            exit(terminated.exitCode)
+        } catch let .errorExit(exitCode, _) as CommandLineError {
+            exit(exitCode)
         } catch let error as Error {
             SwiftlyCore.print(error.message)
             exit(1)

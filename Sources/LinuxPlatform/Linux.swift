@@ -1,3 +1,4 @@
+import CommandLine
 import Foundation
 import SwiftlyCore
 
@@ -246,7 +247,7 @@ public struct Linux: Platform {
         }
 
         if requireSignatureValidation {
-            guard (try? self.runProgram("gpg", "--version", quiet: true)) != nil else {
+            guard (try? await Gpg().version()) != nil else {
                 var msg = "gpg is not installed. "
                 if let manager = manager {
                     msg += """
@@ -274,7 +275,7 @@ public struct Linux: Platform {
                 }
 
                 try await httpClient.downloadFile(url: url, to: tmpFile)
-                try self.runProgram("gpg", "--import", tmpFile.path, quiet: true)
+                try Gpg()._import(files: tmpFile.path).run(quiet: true)
 
                 swiftGPGKeysRefreshed = true
             }
@@ -303,7 +304,7 @@ public struct Linux: Platform {
         do {
             switch manager {
             case "apt-get":
-                if let pkgList = try await self.runProgramOutput("dpkg", "-l", package) {
+                if let pkgList = try await runProgramOutput("dpkg", "-l", package) {
                     // The package might be listed but not in an installed non-error state.
                     //
                     // Look for something like this:
@@ -317,7 +318,7 @@ public struct Linux: Platform {
                 }
                 return false
             case "yum":
-                try self.runProgram("yum", "list", "installed", package, quiet: true)
+                try runProgram("yum", "list", "installed", package, quiet: true)
                 return true
             default:
                 return true
@@ -373,7 +374,7 @@ public struct Linux: Platform {
             tmpDir.appendingPathComponent(String(name))
         }
 
-        try self.runProgram(tmpDir.appendingPathComponent("swiftly").path, "init")
+        try runProgram(tmpDir.appendingPathComponent("swiftly").path, "init")
     }
 
     public func uninstall(_ toolchain: ToolchainVersion) throws {
@@ -412,7 +413,7 @@ public struct Linux: Platform {
 
         SwiftlyCore.print("Verifying toolchain signature...")
         do {
-            try self.runProgram("gpg", "--verify", sigFile.path, archive.path, quiet: !verbose)
+            try Gpg().verify(files: sigFile.path, archive.path).run(quiet: !verbose)
         } catch {
             throw Error(message: "Signature verification failed: \(error).")
         }
@@ -543,14 +544,8 @@ public struct Linux: Platform {
     }
 
     public func getShell() async throws -> String {
-        if let passwds = try await runProgramOutput("getent", "passwd") {
-            for line in passwds.components(separatedBy: "\n") {
-                if line.hasPrefix("root:") {
-                    if case let comps = line.components(separatedBy: ":"), comps.count > 1 {
-                        return comps[comps.count - 1]
-                    }
-                }
-            }
+        if let entry = try await Getent(database: "passwd", keys: ProcessInfo.processInfo.userName).entries().first {
+            if let shell = entry.last { return shell }
         }
 
         // Fall back on bash on Linux and other Unixes

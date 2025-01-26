@@ -1,4 +1,5 @@
 import ArgumentParser
+import CommandLine
 import Foundation
 import SwiftlyCore
 
@@ -95,8 +96,8 @@ internal struct Run: SwiftlyCommand {
             }
 
             try await Swiftly.currentPlatform.proxy(toolchain, command[0], [String](command[1...]))
-        } catch let terminated as RunProgramError {
-            Foundation.exit(terminated.exitCode)
+        } catch let .errorExit(exitCode, _) as CommandLineError {
+            Foundation.exit(exitCode)
         } catch {
             throw error
         }

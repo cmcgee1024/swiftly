@@ -1,3 +1,4 @@
+import CommandLine
 import Foundation
 import SwiftlyCore
 
@@ -60,7 +61,7 @@ public struct MacOS: Platform {
 
         if SwiftlyCore.mockedHomeDir == nil {
             SwiftlyCore.print("Installing package in user home directory...")
-            try runProgram("installer", "-verbose", "-pkg", tmpFile.path, "-target", "CurrentUserHomeDirectory", quiet: !verbose)
+            try Installer(verbose: true, pkg: tmpFile.path, target: "CurrentUserHomeDirectory").run(quiet: !verbose)
         } else {
             // In the case of a mock for testing purposes we won't use the installer, perferring a manual process because
             //  the installer will not install to an arbitrary path, only a volume or user home directory.
@@ -70,7 +71,7 @@ public struct MacOS: Platform {
             if !toolchainDir.fileExists() {
                 try FileManager.default.createDirectory(at: toolchainDir, withIntermediateDirectories: false)
             }
-            try runProgram("pkgutil", "--verbose", "--expand", tmpFile.path, tmpDir.path, quiet: !verbose)
+            try Pkgutil(.verbose).expand(pkgPath: tmpFile.path, dirPath: tmpDir.path).run()
             // There's a slight difference in the location of the special Payload file between official swift packages
             // and the ones that are mocked here in the test framework.
             var payload = tmpDir.appendingPathComponent("Payload")
@@ -79,7 +80,7 @@ public struct MacOS: Platform {
             }
 
             SwiftlyCore.print("Untarring pkg Payload...")
-            try runProgram("tar", "-C", toolchainDir.path, "-xvf", payload.path, quiet: !verbose)
+            try Tar(.directory(toolchainDir.path)).extract(.archive(payload.path)).run(quiet: !verbose)
         }
     }
 
@@ -94,8 +95,8 @@ public struct MacOS: Platform {
             homeDir = FileManager.default.homeDirectoryForCurrentUser
 
             SwiftlyCore.print("Extracting the swiftly package...")
-            try runProgram("installer", "-pkg", archive.path, "-target", "CurrentUserHomeDirectory")
-            try? runProgram("pkgutil", "--volume", homeDir.path, "--forget", "org.swift.swiftly")
+            try Installer(pkg: archive.path, target: "CurrentUserHomeDirectory").run()
+            try Pkgutil(.volume(homeDir.path)).forget(packageId: "org.swift.swiftly").run()
         } else {
             homeDir = SwiftlyCore.mockedHomeDir ?? FileManager.default.homeDirectoryForCurrentUser
 
@@ -105,7 +106,7 @@ public struct MacOS: Platform {
             // In the case of a mock for testing purposes we won't use the installer, perferring a manual process because
             //  the installer will not install to an arbitrary path, only a volume or user home directory.
             let tmpDir = self.getTempFilePath()
-            try runProgram("pkgutil", "--expand", archive.path, tmpDir.path)
+            try Pkgutil().expand(pkgPath: archive.path, dirPath: tmpDir.path).run()
 
             // There's a slight difference in the location of the special Payload file between official swift packages
             // and the ones that are mocked here in the test framework.
@@ -114,10 +115,10 @@ public struct MacOS: Platform {
                 throw Error(message: "Payload file could not be found at \(tmpDir).")
             }
 
-            try runProgram("tar", "-C", installDir.path, "-xf", payload.path)
+            try Tar(.directory(installDir.path)).extract(.archive(payload.path)).run()
         }
 
-        try self.runProgram(homeDir.appendingPathComponent("usr/local/bin/swiftly").path, "init")
+        try runProgram(homeDir.appendingPathComponent("usr/local/bin/swiftly").path, "init")
     }
 
     public func uninstall(_ toolchain: ToolchainVersion) throws {
@@ -138,7 +139,7 @@ public struct MacOS: Platform {
         try FileManager.default.removeItem(at: toolchainDir)
 
         let homedir = ProcessInfo.processInfo.environment["HOME"]!
-        try? runProgram("pkgutil", "--volume", homedir, "--forget", pkgInfo.CFBundleIdentifier)
+        try Pkgutil(.volume(homedir)).forget(packageId: pkgInfo.CFBundleIdentifier).run()
     }
 
     public func getExecutableName() -> String {
@@ -160,14 +161,8 @@ public struct MacOS: Platform {
     }
 
     public func getShell() async throws -> String {
-        if let directoryInfo = try await runProgramOutput("dscl", ".", "-read", FileManager.default.homeDirectoryForCurrentUser.path) {
-            for line in directoryInfo.components(separatedBy: "\n") {
-                if line.hasPrefix("UserShell: ") {
-                    if case let comps = line.components(separatedBy: ": "), comps.count == 2 {
-                        return comps[1]
-                    }
-                }
-            }
+        if let shell = try await Dscl(datasource: ".").read(path: FileManager.default.homeDirectoryForCurrentUser.path, keys: "UserShell").properties().first {
+            return shell.value
         }
 
         // Fall back to zsh on macOS

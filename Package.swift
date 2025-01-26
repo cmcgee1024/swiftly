@@ -33,6 +33,7 @@ let package = Package(
                 .product(name: "SwiftToolsSupport-auto", package: "swift-tools-support-core"),
             ]
         ),
+        .target(name: "CommandLine"),
         .target(
             name: "SwiftlyCore",
             dependencies: [
@@ -68,6 +69,7 @@ let package = Package(
             name: "build-swiftly-release",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .target(name: "CommandLine"),
             ],
             path: "Tools/build-swiftly-release"
         ),
@@ -76,6 +78,7 @@ let package = Package(
             dependencies: [
                 "SwiftlyCore",
                 "CLibArchive",
+                "CommandLine",
             ],
             linkerSettings: [
                 .linkedLibrary("z"),
@@ -85,6 +88,7 @@ let package = Package(
             name: "MacOSPlatform",
             dependencies: [
                 "SwiftlyCore",
+                "CommandLine",
             ]
         ),
         .systemLibrary(
