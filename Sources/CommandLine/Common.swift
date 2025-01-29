@@ -12,7 +12,7 @@ public struct Dscl {
         self.datasource = datasource
     }
 
-    public func args() -> [String] {
+    func args() -> [String] {
         var args = [self.programPath ?? "dscl"]
         if let datasource = self.datasource {
             args += [datasource]
@@ -24,7 +24,7 @@ public struct Dscl {
         ReadCommand(dscl: self, path: path, keys: keys)
     }
 
-    public struct ReadCommand {
+    public struct ReadCommand: RunnableWithOutput {
         var dscl: Dscl
         var path: String?
         var keys: [String]
@@ -42,31 +42,22 @@ public struct Dscl {
             }
             return args
         }
-
-        public func run(env: [String: String]? = nil) async throws -> String? {
-            let args = self.args()
-            guard let program = args.first else {
-                throw CommandLineError.invalidArgs
-            }
-            return try await runProgramOutput(program, [String](args[1...]), env: env)
-        }
     }
 }
 
-extension Dscl.ReadCommand {
-    public func properties(env: [String: String]? = nil) async throws -> [(key: String, value: String)] {
-        let output = try await self.run(env: env)
-        guard let output else { return [] }
+public func properties(_ dsclRead: Dscl.ReadCommand, env: [String: String]? = nil) async throws -> [(key: String, value: String)] {
+    let output = try await runCommand(dsclRead, env: env)
+    guard let output else { return [] }
 
-        var props: [(key: String, value: String)] = []
-        for line in output.components(separatedBy: "\n") {
-            if case let comps = line.components(separatedBy: ": "), comps.count == 2 {
-                props.append((key: comps[0], value: comps[1]))
-            }
+    var props: [(key: String, value: String)] = []
+    for line in output.components(separatedBy: "\n") {
+        if case let comps = line.components(separatedBy: ": "), comps.count == 2 {
+            props.append((key: comps[0], value: comps[1]))
         }
-        return props
     }
+    return props
 }
+
 
 public struct Lipo {
     var programPath: String?
@@ -78,7 +69,7 @@ public struct Lipo {
         self.inputFiles = inputFiles
     }
 
-    public func args() -> [String] {
+    func args() -> [String] {
         [self.programPath ?? "lipo"] + self.inputFiles
     }
 
@@ -86,7 +77,7 @@ public struct Lipo {
         CreateCommand(self, options)
     }
 
-    public struct CreateCommand {
+    public struct CreateCommand: Runnable {
         var lipo: Lipo
 
         var options: [Option]
@@ -114,14 +105,10 @@ public struct Lipo {
             }
             return args
         }
-
-        public func run(env: [String: String]? = nil) throws {
-            try runProgram(self.args(), env: env)
-        }
     }
 }
 
-public struct Pkgbuild {
+public struct Pkgbuild: Runnable {
     var programPath: String?
 
     var options: [Option]
@@ -165,13 +152,9 @@ public struct Pkgbuild {
         args += [self.packageOutputPath]
         return args
     }
-
-    public func run(env: [String: String]? = nil) throws {
-        try runProgram(self.args(), env: env)
-    }
 }
 
-public struct Getent {
+public struct Getent: RunnableWithOutput {
     var programPath: String?
 
     var database: String
@@ -194,25 +177,17 @@ public struct Getent {
         args += self.keys
         return args
     }
+}
 
-    public func run(env: [String: String]? = nil) async throws -> String? {
-        let args = self.args()
-        guard let program = args.first else {
-            throw CommandLineError.invalidArgs
-        }
-        return try await runProgramOutput(program, [String](args[1...]), env: env)
+public func entries(_ getent: Getent, env: [String: String]? = nil) async throws -> [[String]] {
+    let output = try await runCommand(getent, env: env)
+    guard let output else { return [] }
+
+    var entries: [[String]] = []
+    for line in output.components(separatedBy: "\n") {
+        entries.append(line.components(separatedBy: ":"))
     }
-
-    public func entries() async throws -> [[String]] {
-        let output = try await self.run()
-        guard let output else { return [] }
-
-        var entries: [[String]] = []
-        for line in output.components(separatedBy: "\n") {
-            entries.append(line.components(separatedBy: ":"))
-        }
-        return entries
-    }
+    return entries
 }
 
 public struct Git {
@@ -222,7 +197,7 @@ public struct Git {
         self.programPath = programPath
     }
 
-    public func args() -> [String] {
+    func args() -> [String] {
         var args: [String] = [self.programPath ?? "git"]
         return args
     }
@@ -235,7 +210,7 @@ public struct Git {
         DiffIndexCommand(self, options, treeIsh: treeIsh)
     }
 
-    public struct LogCommand {
+    public struct LogCommand: RunnableWithOutput {
         var git: Git
         var options: [Option]
 
@@ -260,22 +235,15 @@ public struct Git {
 
         public func args() -> [String] {
             var args: [String] = self.git.args()
+            args += ["log"]
             for opt in self.options {
                 args += opt.args()
             }
             return args
         }
-
-        public func run(env: [String: String]? = nil) async throws -> String? {
-            let args = self.args()
-            guard let program = args.first else {
-                throw CommandLineError.invalidArgs
-            }
-            return try await runProgramOutput(program, [String](args[1...]), env: env)
-        }
     }
 
-    public struct DiffIndexCommand {
+    public struct DiffIndexCommand: RunnableWithOutput {
         var git: Git
         var options: [Option]
         var treeIsh: String?
@@ -299,6 +267,7 @@ public struct Git {
 
         public func args() -> [String] {
             var args: [String] = self.git.args()
+            args += ["diff-index"]
             for opt in self.options {
                 args += opt.args()
             }
@@ -306,14 +275,6 @@ public struct Git {
                 args += [treeIsh]
             }
             return args
-        }
-
-        public func run(env: [String: String]? = nil) async throws -> String? {
-            let args = self.args()
-            guard let program = args.first else {
-                throw CommandLineError.invalidArgs
-            }
-            return try await runProgramOutput(program, [String](args[1...]), env: env)
         }
     }
 }
@@ -340,7 +301,7 @@ public struct Tar {
         }
     }
 
-    public func args() -> [String] {
+    func args() -> [String] {
         var args = [self.programPath ?? "tar"]
         for opt in self.options {
             args += opt.args()
@@ -353,7 +314,7 @@ public struct Tar {
         CreateCommand(self, options, files: files)
     }
 
-    public struct CreateCommand {
+    public struct CreateCommand: Runnable {
         var tar: Tar
 
         var options: [Option]
@@ -393,21 +354,13 @@ public struct Tar {
 
             return args
         }
-
-        public func run(env: [String: String]? = nil) async throws -> String? {
-            let args = self.args()
-            guard let program = args.first else {
-                throw CommandLineError.invalidArgs
-            }
-            return try await runProgramOutput(program, [String](args[1...]), env: env)
-        }
     }
 
     public func extract(_ options: ExtractCommand.Option...) -> ExtractCommand {
         ExtractCommand(self, options)
     }
 
-    public struct ExtractCommand {
+    public struct ExtractCommand: Runnable {
         var tar: Tar
 
         var options: [Option]
@@ -421,7 +374,7 @@ public struct Tar {
             case archive(String)
             case compressed
 
-            public func args() -> [String] {
+            func args() -> [String] {
                 switch self {
                 case let .archive(archive):
                     return ["--file", archive]
@@ -440,34 +393,25 @@ public struct Tar {
 
             return args
         }
-
-        public func run(quiet: Bool = false, env: [String: String]? = nil) throws {
-            try runProgram(self.args(), quiet: quiet, env: env)
-        }
     }
 }
 
-public struct Swift {
+public struct Swift: Versionable {
+    public static var versionFlag: String = "--version"
+
     var programPath: String?
 
     public init(programPath: String? = nil) {
         self.programPath = programPath
     }
 
-    public func version(env: [String: String]? = nil) async throws -> String {
-        do {
-            guard let version = try? await runProgramOutput(self.programPath ?? "swift", "--version", env: env) else {
-                throw CommandLineError.unknownVersion
-            }
-            return version
-        } catch {
-            throw CommandLineError.unknownVersion
-        }
-    }
-
-    public func args() -> [String] {
+    func args() -> [String] {
         var args: [String] = [self.programPath ?? "swift"]
         return args
+    }
+
+    public func firstArg() -> String {
+        return self.programPath ?? "swift"
     }
 
     public func package() -> PackageCommand {
@@ -481,7 +425,7 @@ public struct Swift {
             self.swift = swift
         }
 
-        public func args() -> [String] {
+        func args() -> [String] {
             self.swift.args() + ["package"]
         }
 
@@ -489,7 +433,7 @@ public struct Swift {
             ResetCommand(self)
         }
 
-        public struct ResetCommand {
+        public struct ResetCommand: Runnable {
             var packageCommand: PackageCommand
 
             init(_ packageCommand: PackageCommand) {
@@ -498,14 +442,6 @@ public struct Swift {
 
             public func args() -> [String] {
                 self.packageCommand.args() + ["reset"]
-            }
-
-            public func run(env: [String: String]? = nil) async throws -> String? {
-                let args = self.args()
-                guard let program = args.first else {
-                    throw CommandLineError.invalidArgs
-                }
-                return try await runProgramOutput(program, [String](args[1...]), env: env)
             }
         }
     }
@@ -521,7 +457,7 @@ public struct Swift {
             self.swift = swift
         }
 
-        public func args() -> [String] {
+        func args() -> [String] {
             self.swift.args() + ["sdk"]
         }
 
@@ -529,7 +465,7 @@ public struct Swift {
             InstallCommand(self, bundlePathOrUrl, checksum: checksum)
         }
 
-        public struct InstallCommand {
+        public struct InstallCommand: Runnable {
             var sdkCommand: SdkCommand
             var bundlePathOrUrl: String
             var checksum: String?
@@ -547,21 +483,13 @@ public struct Swift {
                 }
                 return args
             }
-
-            public func run(env: [String: String]? = nil) async throws -> String? {
-                let args = self.args()
-                guard let program = args.first else {
-                    throw CommandLineError.invalidArgs
-                }
-                return try await runProgramOutput(program, [String](args[1...]), env: env)
-            }
         }
 
         public func remove(_ sdkName: String) -> RemoveCommand {
             RemoveCommand(self, sdkName)
         }
 
-        public struct RemoveCommand {
+        public struct RemoveCommand: Runnable {
             var sdkCommand: SdkCommand
             var sdkIdOrBundleName: String
 
@@ -574,14 +502,6 @@ public struct Swift {
                 var args = self.sdkCommand.args() + ["remove"] + [self.sdkIdOrBundleName]
                 return args
             }
-
-            public func run(env: [String: String]? = nil) async throws -> String? {
-                let args = self.args()
-                guard let program = args.first else {
-                    throw CommandLineError.invalidArgs
-                }
-                return try await runProgramOutput(program, [String](args[1...]), env: env)
-            }
         }
     }
 
@@ -589,7 +509,7 @@ public struct Swift {
         BuildCommand(self, options)
     }
 
-    public struct BuildCommand {
+    public struct BuildCommand: Runnable {
         var swift: Swift
         var options: [Option]
 
@@ -614,7 +534,7 @@ public struct Swift {
             case swiftSdk(String)
             case staticSwiftStdlib
 
-            public func args() -> [String] {
+            func args() -> [String] {
                 switch self {
                 case let .arch(arch):
                     return ["--arch=\(arch)"]
@@ -631,18 +551,10 @@ public struct Swift {
                 }
             }
         }
-
-        public func run(env: [String: String]? = nil) async throws -> String? {
-            let args = self.args()
-            guard let program = args.first else {
-                throw CommandLineError.invalidArgs
-            }
-            return try await runProgramOutput(program, [String](args[1...]), env: env)
-        }
     }
 }
 
-public struct Make {
+public struct Make: Runnable {
     var programPath: String?
 
     public init(programPath: String? = nil) {
@@ -653,7 +565,7 @@ public struct Make {
         InstallCommand(self)
     }
 
-    public struct InstallCommand {
+    public struct InstallCommand: Runnable {
         var make: Make
 
         init(_ make: Make) {
@@ -663,23 +575,15 @@ public struct Make {
         public func args() -> [String] {
             self.make.args() + ["install"]
         }
-
-        public func run(env: [String: String]? = nil) throws {
-            try runProgram(self.args(), env: env)
-        }
     }
 
     public func args() -> [String] {
         var args = [self.programPath ?? "make"]
         return args
     }
-
-    public func run(env: [String: String]? = nil) throws {
-        try runProgram(self.args(), env: env)
-    }
 }
 
-public struct Strip {
+public struct Strip: Runnable {
     var programPath: String?
 
     var names: [String]
@@ -692,13 +596,9 @@ public struct Strip {
     public func args() -> [String] {
         [self.programPath ?? "strip"] + self.names
     }
-
-    public func run(env: [String: String]? = nil) throws {
-        try runProgram(self.args(), env: env)
-    }
 }
 
-public struct Sha256sum {
+public struct Sha256sum: RunnableWithOutput {
     var programPath: String?
 
     var files: [String]
@@ -710,15 +610,6 @@ public struct Sha256sum {
 
     public func args() -> [String] {
         [self.programPath ?? "strip"] + self.files
-    }
-
-    public func run(env: [String: String]? = nil) async throws -> String? {
-        let args = self.args()
-        guard let program = args.first else {
-            throw CommandLineError.invalidArgs
-        }
-
-        return try await runProgramOutput(program, [String](args[1...]), env: env)
     }
 }
 
@@ -746,7 +637,7 @@ public struct Pkgutil {
         self.options = options
     }
 
-    public func args() -> [String] {
+    func args() -> [String] {
         var args = [self.programPath ?? "pkgutil"]
         for opt in self.options {
             args += opt.args()
@@ -758,7 +649,7 @@ public struct Pkgutil {
         ExpandCommand(self, pkgPath: pkgPath, dirPath: dirPath)
     }
 
-    public struct ExpandCommand {
+    public struct ExpandCommand: Runnable {
         var pkgutil: Pkgutil
         var pkgPath: String
         var dirPath: String
@@ -774,17 +665,13 @@ public struct Pkgutil {
             args += ["--expand"] + [self.pkgPath, self.dirPath]
             return args
         }
-
-        public func run(quiet: Bool = false, env: [String: String]? = nil) throws {
-            try runProgram(self.args(), quiet: quiet, env: env)
-        }
     }
 
     public func forget(packageId: String) -> ForgetCommand {
         ForgetCommand(self, packageId: packageId)
     }
 
-    public struct ForgetCommand {
+    public struct ForgetCommand: Runnable {
         var pkgutil: Pkgutil
         var packageId: String
 
@@ -798,14 +685,10 @@ public struct Pkgutil {
             args += ["--forget", self.packageId]
             return args
         }
-
-        public func run(quiet: Bool = false, env: [String: String]? = nil) throws {
-            try runProgram(self.args(), quiet: quiet, env: env)
-        }
     }
 }
 
-public struct Installer {
+public struct Installer: Runnable {
     var programPath: String?
 
     var verbose: Bool
@@ -829,32 +712,30 @@ public struct Installer {
         args += ["-target", self.target]
         return args
     }
-
-    public func run(quiet: Bool = false, env: [String: String]? = nil) throws {
-        try runProgram(self.args(), quiet: quiet, env: env)
-    }
 }
 
-public struct Gpg {
+public struct Gpg: Versionable {
+    public static var versionFlag: String = "--version"
+
     var programPath: String?
 
     public init(programPath: String? = nil) {
         self.programPath = programPath
     }
 
-    public func version() async throws -> String? {
-        try await runProgramOutput(self.programPath ?? "gpg", "--version")
+    func args() -> [String] {
+        [self.programPath ?? "gpg"]
     }
 
-    public func args() -> [String] {
-        [self.programPath ?? "gpg"]
+    public func firstArg() -> String {
+        return self.programPath ?? "gpg"
     }
 
     public func _import(files: String...) -> ImportCommand {
         ImportCommand(self, files: files)
     }
 
-    public struct ImportCommand {
+    public struct ImportCommand: Runnable {
         var gpg: Gpg
         var files: [String]
 
@@ -869,17 +750,13 @@ public struct Gpg {
             args += self.files
             return args
         }
-
-        public func run(quiet: Bool = false, env: [String: String]? = nil) throws {
-            try runProgram(self.args(), quiet: quiet, env: env)
-        }
     }
 
     public func verify(files: String...) -> VerifyCommand {
         VerifyCommand(self, files: files)
     }
 
-    public struct VerifyCommand {
+    public struct VerifyCommand: Runnable {
         var gpg: Gpg
         var files: [String]
 
@@ -893,10 +770,6 @@ public struct Gpg {
             args += ["--verify"]
             args += self.files
             return args
-        }
-
-        public func run(quiet: Bool = false, env: [String: String]? = nil) throws {
-            try runProgram(self.args(), quiet: quiet, env: env)
         }
     }
 }

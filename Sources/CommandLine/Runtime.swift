@@ -99,3 +99,39 @@ public func runProgramOutput(_ program: String, _ args: [String], env: [String: 
 }
 
 #endif
+
+public protocol Runnable {
+    func args() -> [String]
+}
+
+public protocol RunnableWithOutput {
+    func args() -> [String]
+}
+
+public protocol Versionable {
+    func firstArg() -> String
+    static var versionFlag: String {get}
+}
+
+public func runCommand(_ runnable: Runnable, quiet: Bool = false, env: [String: String]? = nil) throws {
+   try runProgram(runnable.args(), quiet: quiet, env: env)
+}
+
+public func runCommand(_ runnable: RunnableWithOutput, env: [String: String]? = nil) async throws -> String? {
+   let args = runnable.args()
+   guard let program = args.first else {
+       throw CommandLineError.invalidArgs
+   }
+   return try await runProgramOutput(program, [String](args[1...]), env: env)
+}
+
+public func commandVersion<V: Versionable>(_ versionable: V) async throws -> String {
+    do {
+        guard let version = try? await runProgramOutput(versionable.firstArg(), V.versionFlag) else {
+            throw CommandLineError.unknownVersion
+        }
+        return version
+    } catch {
+        throw CommandLineError.unknownVersion
+    }
+}

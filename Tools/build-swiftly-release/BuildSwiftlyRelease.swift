@@ -27,7 +27,7 @@ public struct Error: LocalizedError, CustomStringConvertible {
 #if os(macOS)
 
 public func getShell() async throws -> String {
-    let props = try await Dscl(datasource: ".").read(path: FileManager.default.homeDirectoryForCurrentUser.path, keys: "UserShell").properties(env: nil)
+    let props = try await properties(Dscl(datasource: ".").read(path: FileManager.default.homeDirectoryForCurrentUser.path, keys: "UserShell"))
     if let shellInfo = props.first, shellInfo.key == "UserShell" { return shellInfo.value }
 
     // Fall back to zsh on macOS
@@ -130,7 +130,7 @@ struct BuildSwiftlyRelease: AsyncParsableCommand {
         let swift = try await self.assertTool("swift", message: "Please install swift \(requiredSwiftVersion) and make sure that it is added to your path.")
 
         // We also need a swift toolchain with the correct version
-        guard case let swiftVersion = try await Swift().version(), swiftVersion.contains("Swift version \(requiredSwiftVersion)") else {
+        guard case let swiftVersion = try await commandVersion(Swift()), swiftVersion.contains("Swift version \(requiredSwiftVersion)") else {
             throw Error(message: "Swiftly releases require a Swift \(requiredSwiftVersion) toolchain available on the path")
         }
 
@@ -142,12 +142,12 @@ struct BuildSwiftlyRelease: AsyncParsableCommand {
             return
         }
 
-        guard let gitTags = try await Git().log(.maxCount(1), .pretty("format:%d")).run(), gitTags.contains("tag: \(self.version)") else {
+        guard let gitTags = try await runCommand(Git().log(.maxCount(1), .pretty("format:%d"))), gitTags.contains("tag: \(self.version)") else {
             throw Error(message: "Git repo is not yet tagged for release \(self.version). Please tag this commit with that version and push it to GitHub.")
         }
 
         do {
-            _ = try await Git().diffIndex(.quiet, treeIsh: "HEAD").run()
+            _ = try await runCommand(try await Git().diffIndex(.quiet, treeIsh: "HEAD"))
         } catch {
             throw Error(message: "Git repo has local changes. First commit these changes, tag the commit with release \(self.version) and push the tag to GitHub.")
         }
@@ -176,7 +176,7 @@ struct BuildSwiftlyRelease: AsyncParsableCommand {
         try await self.checkGitRepoStatus()
 
         // Start with a fresh SwiftPM package
-        _ = try await Swift().package().reset().run()
+        _ = try await runCommand(Swift().package().reset())
 
         // Build a specific version of libarchive with a check on the tarball's SHA256
         let libArchiveVersion = "3.7.4"
@@ -191,18 +191,18 @@ struct BuildSwiftlyRelease: AsyncParsableCommand {
 
         try? FileManager.default.removeItem(atPath: libArchivePath)
         try runProgram(curl, "-o", "\(buildCheckoutsDir + "/libarchive-\(libArchiveVersion).tar.gz")", "--remote-name", "--location", "https://github.com/libarchive/libarchive/releases/download/v\(libArchiveVersion)/libarchive-\(libArchiveVersion).tar.gz")
-        let libArchiveTarShaActual = try await Sha256sum("\(buildCheckoutsDir)/libarchive-\(libArchiveVersion).tar.gz").run()
+        let libArchiveTarShaActual = try await runCommand(Sha256sum("\(buildCheckoutsDir)/libarchive-\(libArchiveVersion).tar.gz"))
         guard let libArchiveTarShaActual, libArchiveTarShaActual.starts(with: libArchiveTarSha) else {
             let shaActual = libArchiveTarShaActual ?? "none"
             throw Error(message: "The libarchive tar.gz file sha256sum is \(shaActual), but expected \(libArchiveTarSha)")
         }
-        _ = try await Tar(.directory(buildCheckoutsDir)).extract(.compressed, .archive("\(buildCheckoutsDir)/libarchive-\(libArchiveVersion).tar.gz")).run()
+        _ = try await runCommand(Tar(.directory(buildCheckoutsDir)).extract(.compressed, .archive("\(buildCheckoutsDir)/libarchive-\(libArchiveVersion).tar.gz")))
 
         let cwd = FileManager.default.currentDirectoryPath
         FileManager.default.changeCurrentDirectoryPath(libArchivePath)
 
         let swiftVerRegex: Regex<(Substring, Substring)> = try! Regex("Swift version (\\d+\\.\\d+\\.\\d+) ")
-        let swiftVerOutput = (try await Swift().version()) ?? ""
+        let swiftVerOutput = (try await commandVersion(Swift())) ?? ""
         guard let swiftVerMatch = try swiftVerRegex.firstMatch(in: swiftVerOutput) else {
             throw Error(message: "Unable to detect swift version")
         }
@@ -228,7 +228,7 @@ struct BuildSwiftlyRelease: AsyncParsableCommand {
             throw Error(message: "Swift release \(swiftVersion) has no Static SDK offering")
         }
 
-        _ = try await Swift().sdk().install("https://download.swift.org/swift-\(swiftVersion)-release/static-sdk/swift-\(swiftVersion)-RELEASE/swift-\(swiftVersion)-RELEASE_static-linux-0.0.1.artifactbundle.tar.gz", checksum: sdkPlatform.checksum ?? "deadbeef").run()
+        _ = try await runCommand(Swift().sdk().install("https://download.swift.org/swift-\(swiftVersion)-release/static-sdk/swift-\(swiftVersion)-RELEASE/swift-\(swiftVersion)-RELEASE_static-linux-0.0.1.artifactbundle.tar.gz", checksum: sdkPlatform.checksum ?? "deadbeef"))
 
         var customEnv = ProcessInfo.processInfo.environment
         customEnv["CC"] = "\(cwd)/Tools/build-swiftly-release/musl-clang"
@@ -256,19 +256,19 @@ struct BuildSwiftlyRelease: AsyncParsableCommand {
             env: customEnv
         )
 
-        try await Make().run(env: customEnv)
+        try await runCommand(Make(), env: customEnv)
 
-        try await Make().install().run()
+        try await runCommand(Make().install())
 
         FileManager.default.changeCurrentDirectoryPath(cwd)
 
-        _ = try await Swift().build(.swiftSdk("\(arch)-swift-linux-musl"), .product("swiftly"), .pkgConfigPath("\(pkgConfigPath)/lib/pkgconfig"), .staticSwiftStdlib, .configuration("release")).run()
-        _ = try await Swift().sdk().remove(sdkName).run()
+        _ = try await runCommand(Swift().build(.swiftSdk("\(arch)-swift-linux-musl"), .product("swiftly"), .pkgConfigPath("\(pkgConfigPath)/lib/pkgconfig"), .staticSwiftStdlib, .configuration("release")))
+        _ = try await runCommand(Swift().sdk().remove(sdkName))
 
         let releaseDir = cwd + "/.build/release"
 
         // Strip the symbols from the binary to decrease its size
-        try await Strip(releaseDir + "/swiftly").run()
+        try await runCommand(Strip(releaseDir + "/swiftly"))
 
         try await self.collectLicenses(releaseDir)
 
@@ -278,7 +278,7 @@ struct BuildSwiftlyRelease: AsyncParsableCommand {
         let releaseArchive = "\(releaseDir)/swiftly-\(version)-x86_64.tar.gz"
 #endif
 
-        _ = try await Tar(.directory(releaseDir)).create(.compressed, .archive(releaseArchive), files: "swiftly", "LICENSE.txt").run()
+        _ = try await runCommand(Tar(.directory(releaseDir)).create(.compressed, .archive(releaseArchive), files: "swiftly", "LICENSE.txt"))
 
         print(releaseArchive)
     }
@@ -295,26 +295,26 @@ struct BuildSwiftlyRelease: AsyncParsableCommand {
         _ = try await self.assertTool("pkgbuild", message: "In order to make pkg installers there needs to be the `pkgbuild` tool that is installed on macOS.")
         _ = try await self.assertTool("strip", message: "In order to strip binaries there needs to be the `strip` tool that is installed on macOS.")
 
-        _ = try await Swift().package().reset().run()
+        _ = try await runCommand(Swift().package().reset())
 
         for arch in ["x86_64", "arm64"] {
-            _ = try await Swift().build(.product("swiftly"), .configuration("release"), .arch(arch)).run()
-            try await Strip(".build/\(arch)-apple-macosx/release/swiftly").run()
+            _ = try await runCommand(Swift().build(.product("swiftly"), .configuration("release"), .arch(arch)))
+            try await runCommand(Strip(".build/\(arch)-apple-macosx/release/swiftly"))
         }
 
         let swiftlyBinDir = FileManager.default.currentDirectoryPath + "/.build/release/usr/local/bin"
         try? FileManager.default.createDirectory(atPath: swiftlyBinDir, withIntermediateDirectories: true)
 
-        try await Lipo(".build/x86_64-apple-macosx/release/swiftly", ".build/arm64-apple-macosx/release/swiftly").create(.output("\(swiftlyBinDir)/swiftly")).run()
+        try await runCommand(Lipo(".build/x86_64-apple-macosx/release/swiftly", ".build/arm64-apple-macosx/release/swiftly").create(.output("\(swiftlyBinDir)/swiftly")))
 
         let swiftlyLicenseDir = FileManager.default.currentDirectoryPath + "/.build/release/usr/local/share/doc/swiftly/license"
         try? FileManager.default.createDirectory(atPath: swiftlyLicenseDir, withIntermediateDirectories: true)
         try await self.collectLicenses(swiftlyLicenseDir)
 
         if let cert {
-            try await Pkgbuild(.installLocation("/usr/local"), .version(self.version), .identifier(identifier), .sign(cert), root: swiftlyBinDir + "/..", ".build/release/swiftly-\(self.version).pkg").run()
+            try await runCommand(Pkgbuild(.installLocation("/usr/local"), .version(self.version), .identifier(identifier), .sign(cert), root: swiftlyBinDir + "/..", ".build/release/swiftly-\(self.version).pkg"))
         } else {
-            try await Pkgbuild(.installLocation("/usr/local"), .version(self.version), .identifier(identifier), root: swiftlyBinDir + "/..", ".build/release/swiftly-\(self.version).pkg").run()
+            try await runCommand(Pkgbuild(.installLocation("/usr/local"), .version(self.version), .identifier(identifier), root: swiftlyBinDir + "/..", ".build/release/swiftly-\(self.version).pkg"))
         }
     }
 }
