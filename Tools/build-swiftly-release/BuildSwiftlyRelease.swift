@@ -37,7 +37,7 @@ public func getShell() async throws -> String {
 #elseif os(Linux)
 
 public func getShell() async throws -> String {
-    if let entry = try await Getent(database: "passwd", keys: ProcessInfo.processInfo.userName).entries().first {
+    if let entry = try await entries(Getent(database: "passwd", keys: ProcessInfo.processInfo.userName)).first {
         if let shell = entry.last { return shell }
     }
 

@@ -58,7 +58,6 @@ public func properties(_ dsclRead: Dscl.ReadCommand, env: [String: String]? = ni
     return props
 }
 
-
 public struct Lipo {
     var programPath: String?
 
@@ -100,6 +99,7 @@ public struct Lipo {
 
         public func args() -> [String] {
             var args = self.lipo.args()
+            args += ["-create"]
             for opt in self.options {
                 args += opt.args()
             }
@@ -344,6 +344,8 @@ public struct Tar {
         public func args() -> [String] {
             var args = self.tar.args()
 
+            args += ["-c"]
+
             for opt in self.options {
                 args += opt.args()
             }
@@ -387,6 +389,8 @@ public struct Tar {
         public func args() -> [String] {
             var args = self.tar.args()
 
+            args += ["-x"]
+
             for opt in self.options {
                 args += opt.args()
             }
@@ -411,7 +415,7 @@ public struct Swift: Versionable {
     }
 
     public func firstArg() -> String {
-        return self.programPath ?? "swift"
+        self.programPath ?? "swift"
     }
 
     public func package() -> PackageCommand {
@@ -609,7 +613,7 @@ public struct Sha256sum: RunnableWithOutput {
     }
 
     public func args() -> [String] {
-        [self.programPath ?? "strip"] + self.files
+        [self.programPath ?? "sha256sum"] + self.files
     }
 }
 
@@ -728,7 +732,7 @@ public struct Gpg: Versionable {
     }
 
     public func firstArg() -> String {
-        return self.programPath ?? "gpg"
+        self.programPath ?? "gpg"
     }
 
     public func _import(files: String...) -> ImportCommand {

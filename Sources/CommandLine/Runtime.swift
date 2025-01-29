@@ -110,19 +110,19 @@ public protocol RunnableWithOutput {
 
 public protocol Versionable {
     func firstArg() -> String
-    static var versionFlag: String {get}
+    static var versionFlag: String { get }
 }
 
 public func runCommand(_ runnable: Runnable, quiet: Bool = false, env: [String: String]? = nil) throws {
-   try runProgram(runnable.args(), quiet: quiet, env: env)
+    try runProgram(runnable.args(), quiet: quiet, env: env)
 }
 
 public func runCommand(_ runnable: RunnableWithOutput, env: [String: String]? = nil) async throws -> String? {
-   let args = runnable.args()
-   guard let program = args.first else {
-       throw CommandLineError.invalidArgs
-   }
-   return try await runProgramOutput(program, [String](args[1...]), env: env)
+    let args = runnable.args()
+    guard let program = args.first else {
+        throw CommandLineError.invalidArgs
+    }
+    return try await runProgramOutput(program, [String](args[1...]), env: env)
 }
 
 public func commandVersion<V: Versionable>(_ versionable: V) async throws -> String {

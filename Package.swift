@@ -100,7 +100,7 @@ let package = Package(
         ),
         .testTarget(
             name: "SwiftlyTests",
-            dependencies: ["Swiftly"],
+            dependencies: ["Swiftly", "CommandLine"],
             resources: [
                 .embedInCode("mock-signing-key-private.pgp"),
             ]

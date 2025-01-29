@@ -247,7 +247,7 @@ public struct Linux: Platform {
         }
 
         if requireSignatureValidation {
-            guard (try? await Gpg().version()) != nil else {
+            guard (try? await commandVersion(Gpg())) != nil else {
                 var msg = "gpg is not installed. "
                 if let manager = manager {
                     msg += """
@@ -275,7 +275,7 @@ public struct Linux: Platform {
                 }
 
                 try await httpClient.downloadFile(url: url, to: tmpFile)
-                try Gpg()._import(files: tmpFile.path).run(quiet: true)
+                try runCommand(Gpg()._import(files: tmpFile.path), quiet: true)
 
                 swiftGPGKeysRefreshed = true
             }
@@ -413,7 +413,7 @@ public struct Linux: Platform {
 
         SwiftlyCore.print("Verifying toolchain signature...")
         do {
-            try Gpg().verify(files: sigFile.path, archive.path).run(quiet: !verbose)
+            try runCommand(Gpg().verify(files: sigFile.path, archive.path), quiet: !verbose)
         } catch {
             throw Error(message: "Signature verification failed: \(error).")
         }
@@ -544,7 +544,7 @@ public struct Linux: Platform {
     }
 
     public func getShell() async throws -> String {
-        if let entry = try await Getent(database: "passwd", keys: ProcessInfo.processInfo.userName).entries().first {
+        if let entry = try await entries(Getent(database: "passwd", keys: ProcessInfo.processInfo.userName)).first {
             if let shell = entry.last { return shell }
         }
 
