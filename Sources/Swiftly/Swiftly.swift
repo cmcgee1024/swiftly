@@ -57,9 +57,9 @@ public struct Swiftly: SwiftlyCommand {
     /// If they do not exist when a swiftly command is invoked, they will be created.
     public static func requiredDirectories(_ ctx: SwiftlyCoreContext) -> [FilePath] {
         [
-            Swiftly.currentPlatform.swiftlyHomeDir(ctx),
-            Swiftly.currentPlatform.swiftlyBinDir(ctx),
-            Swiftly.currentPlatform.swiftlyToolchainsDir(ctx),
+            Swiftly.currentPlatform.swiftlyHomeDir(ctx).path,
+            Swiftly.currentPlatform.swiftlyBinDir(ctx).path,
+            Swiftly.currentPlatform.swiftlyToolchainsDir(ctx).path,
         ]
     }
 
@@ -95,14 +95,7 @@ extension Data {
 extension SwiftlyCommand {
     public mutating func validateSwiftly(_ ctx: SwiftlyCoreContext) async throws {
         for requiredDir in Swiftly.requiredDirectories(ctx) {
-            guard try await fs.exists(atPath: requiredDir) else {
-                do {
-                    try await fs.mkdir(.parents, atPath: requiredDir)
-                } catch {
-                    throw SwiftlyError(message: "Failed to create required directory \"\(requiredDir)\": \(error)")
-                }
-                continue
-            }
+            _ = try? await fs.mkdir(dir: OutFile(requiredDir))
         }
 
         // Verify that the configuration exists and can be loaded

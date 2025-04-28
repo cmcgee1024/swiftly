@@ -82,16 +82,16 @@ struct Init: SwiftlyCommand {
 
             Swiftly installs files into the following locations:
 
-            \(Swiftly.currentPlatform.swiftlyHomeDir(ctx)) - Directory for configuration files
-            \(Swiftly.currentPlatform.swiftlyBinDir(ctx)) - Links to the binaries of the active toolchain
-            \(toolchainsDir) - Directory hosting installed toolchains
+            \(Swiftly.currentPlatform.swiftlyHomeDir(ctx).path) - Directory for configuration files
+            \(Swiftly.currentPlatform.swiftlyBinDir(ctx).path) - Links to the binaries of the active toolchain
+            \(toolchainsDir.path) - Directory hosting installed toolchains
 
             These locations can be changed by setting the environment variables
             SWIFTLY_HOME_DIR, SWIFTLY_BIN_DIR, and SWIFTLY_TOOLCHAINS_DIR before running 'swiftly init' again.
 
             """
 #if os(macOS)
-            if toolchainsDir != fs.home / "Library/Developer/Toolchains" {
+            if toolchainsDir.path != fs.home.path / "Library/Developer/Toolchains" {
                 msg += """
 
                 NOTE: The toolchains are not being installed in a standard macOS location, so Xcode may not be able to find them.
@@ -141,38 +141,32 @@ struct Init: SwiftlyCommand {
             }
         }
 
-        let envFile: FilePath
+        let envFile: OutFile
         let sourceLine: String
         if shell.hasSuffix("fish") {
-            envFile = Swiftly.currentPlatform.swiftlyHomeDir(ctx) / "env.fish"
+            envFile = OutFile((Swiftly.currentPlatform.swiftlyHomeDir(ctx) / "env.fish").path)
             sourceLine = """
 
             # Added by swiftly
-            source "\(envFile)"
+            source "\(envFile.path)"
             """
         } else {
-            envFile = Swiftly.currentPlatform.swiftlyHomeDir(ctx) / "env.sh"
+            envFile = OutFile((Swiftly.currentPlatform.swiftlyHomeDir(ctx) / "env.sh").path)
             sourceLine = """
 
             # Added by swiftly
-            . "\(envFile)"
+            . "\(envFile.path)"
             """
         }
 
         if overwrite {
-            try? await fs.remove(atPath: Swiftly.currentPlatform.swiftlyToolchainsDir(ctx))
-            try? await fs.remove(atPath: Swiftly.currentPlatform.swiftlyHomeDir(ctx))
+            _ = try? await fs.remove(file: Swiftly.currentPlatform.swiftlyToolchainsDir(ctx))
+            _ = try? await fs.remove(file: Swiftly.currentPlatform.swiftlyHomeDir(ctx))
         }
 
         // Go ahead and create the directories as needed
         for requiredDir in Swiftly.requiredDirectories(ctx) {
-            if !(try await fs.exists(atPath: requiredDir)) {
-                do {
-                    try await fs.mkdir(.parents, atPath: requiredDir)
-                } catch {
-                    throw SwiftlyError(message: "Failed to create required directory \"\(requiredDir)\": \(error)")
-                }
-            }
+            _ = try? await fs.mkdir(.parents, dir: OutFile(requiredDir))
         }
 
         // Force the configuration to be present. Generate it if it doesn't already exist or overwrite is set
@@ -190,16 +184,16 @@ struct Init: SwiftlyCommand {
         // Move our executable over to the correct place
         try await Swiftly.currentPlatform.installSwiftlyBin(ctx)
 
-        let envFileExists = try await fs.exists(atPath: envFile)
+        let envFileExists = try await fs.exists(atPath: envFile.path)
 
         if overwrite || !envFileExists {
             await ctx.print("Creating shell environment file for the user...")
             var env = ""
             if shell.hasSuffix("fish") {
                 env = """
-                set -x SWIFTLY_HOME_DIR "\(Swiftly.currentPlatform.swiftlyHomeDir(ctx))"
-                set -x SWIFTLY_BIN_DIR "\(Swiftly.currentPlatform.swiftlyBinDir(ctx))"
-                set -x SWIFTLY_TOOLCHAINS_DIR "\(Swiftly.currentPlatform.swiftlyToolchainsDir(ctx))"
+                set -x SWIFTLY_HOME_DIR "\(Swiftly.currentPlatform.swiftlyHomeDir(ctx).path)"
+                set -x SWIFTLY_BIN_DIR "\(Swiftly.currentPlatform.swiftlyBinDir(ctx).path)"
+                set -x SWIFTLY_TOOLCHAINS_DIR "\(Swiftly.currentPlatform.swiftlyToolchainsDir(ctx).path)"
                 if not contains "$SWIFTLY_BIN_DIR" $PATH
                     set -x PATH "$SWIFTLY_BIN_DIR" $PATH
                 end
@@ -207,9 +201,9 @@ struct Init: SwiftlyCommand {
                 """
             } else {
                 env = """
-                export SWIFTLY_HOME_DIR="\(Swiftly.currentPlatform.swiftlyHomeDir(ctx))"
-                export SWIFTLY_BIN_DIR="\(Swiftly.currentPlatform.swiftlyBinDir(ctx))"
-                export SWIFTLY_TOOLCHAINS_DIR="\(Swiftly.currentPlatform.swiftlyToolchainsDir(ctx))"
+                export SWIFTLY_HOME_DIR="\(Swiftly.currentPlatform.swiftlyHomeDir(ctx).path)"
+                export SWIFTLY_BIN_DIR="\(Swiftly.currentPlatform.swiftlyBinDir(ctx).path)"
+                export SWIFTLY_TOOLCHAINS_DIR="\(Swiftly.currentPlatform.swiftlyToolchainsDir(ctx).path)"
                 if [[ ":$PATH:" != *":$SWIFTLY_BIN_DIR:"* ]]; then
                     export PATH="$SWIFTLY_BIN_DIR:$PATH"
                 fi
@@ -217,34 +211,34 @@ struct Init: SwiftlyCommand {
                 """
             }
 
-            try Data(env.utf8).write(to: envFile, options: .atomic)
+            _ = try Data(env.utf8).write(to: envFile, options: .atomic)
         }
 
         if !noModifyProfile {
             await ctx.print("Updating profile...")
 
-            let userHome = ctx.mockedHomeDir ?? fs.home
+            let userHome = OutFile(ctx.mockedHomeDir ?? fs.home.path)
 
-            let profileHome: FilePath
+            let profileHome: OutFile
             if shell.hasSuffix("zsh") {
                 profileHome = userHome / ".zprofile"
             } else if shell.hasSuffix("bash") {
-                if case let p = userHome / ".bash_profile", try await fs.exists(atPath: p) {
+                if case let p = userHome / ".bash_profile", try await fs.exists(atPath: p.path) {
                     profileHome = p
-                } else if case let p = userHome / ".bash_login", try await fs.exists(atPath: p) {
+                } else if case let p = userHome / ".bash_login", try await fs.exists(atPath: p.path) {
                     profileHome = p
                 } else {
                     profileHome = userHome / ".profile"
                 }
             } else if shell.hasSuffix("fish") {
-                if let xdgConfigHome = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"], case let xdgConfigURL = FilePath(xdgConfigHome) {
-                    let confDir = xdgConfigURL / "fish/conf.d"
-                    try await fs.mkdir(.parents, atPath: confDir)
+                if let xdgConfigHome = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"], case let xdgConfigPath = OutFile(FilePath(xdgConfigHome)) {
+                    let confDir = xdgConfigPath / "fish/conf.d"
                     profileHome = confDir / "swiftly.fish"
+                    _ = try? await fs.mkdir(.parents, dir: confDir)
                 } else {
-                    let confDir = userHome / ".config/fish/conf.d"
-                    try await fs.mkdir(.parents, atPath: confDir)
+                    let confDir = OutFile((userHome / ".config/fish/conf.d").path)
                     profileHome = confDir / "swiftly.fish"
+                    _ = try? await fs.mkdir(.parents, dir: confDir)
                 }
             } else {
                 profileHome = userHome / ".profile"
@@ -252,9 +246,9 @@ struct Init: SwiftlyCommand {
 
             var addEnvToProfile = false
             do {
-                if !(try await fs.exists(atPath: profileHome)) {
+                if !(try await fs.exists(atPath: profileHome.path)) {
                     addEnvToProfile = true
-                } else if case let profileContents = try String(contentsOf: profileHome, encoding: .utf8), !profileContents.contains(sourceLine) {
+                } else if case let profileContents = try String(contentsOf: InFile(profileHome.path), encoding: .utf8), !profileContents.contains(sourceLine) {
                     addEnvToProfile = true
                 }
             } catch {
@@ -262,7 +256,7 @@ struct Init: SwiftlyCommand {
             }
 
             if addEnvToProfile {
-                try Data(sourceLine.utf8).append(to: profileHome)
+                try Data(sourceLine.utf8).append(to: profileHome.path)
             }
         }
 

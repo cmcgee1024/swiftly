@@ -21,6 +21,14 @@ public struct SwiftlyCoreContext: Sendable {
     /// home directory location logic.
     public var mockedHomeDir: FilePath?
 
+    public var homeDir: InFile {
+        guard let d = self.mockedHomeDir else {
+            return fs.home
+        }
+
+        return InFile(d)
+    }
+
     /// A separate current working directory to use for testing purposes. This overrides
     /// swiftly's default current working directory logic.
     public var currentDirectory: FilePath
@@ -42,12 +50,12 @@ public struct SwiftlyCoreContext: Sendable {
 
     public init() {
         self.httpClient = SwiftlyHTTPClient(httpRequestExecutor: HTTPRequestExecutorImpl())
-        self.currentDirectory = fs.cwd
+        self.currentDirectory = fs.cwd.path
     }
 
     public init(httpClient: SwiftlyHTTPClient) {
         self.httpClient = httpClient
-        self.currentDirectory = fs.cwd
+        self.currentDirectory = fs.cwd.path
     }
 
     /// Pass the provided string to the set output handler if any.

@@ -144,7 +144,19 @@ extension Runnable {
         case let .custom(newValue):
             env = newValue
         }
-        try await p.runProgram([executable] + args, quiet: quiet, env: env)
+
+        _ = try p.runProgram([executable] + args, quiet: quiet, env: env)
+    }
+}
+
+public protocol MakeFile: Runnable {
+    var outputFile: FilePath { get }
+}
+
+extension MakeFile {
+    public func makeFile(_ p: Platform, quiet: Bool = false) async throws -> InFile? {
+        try await self.run(p, quiet: quiet)
+        return InFile(self.outputFile)
     }
 }
 

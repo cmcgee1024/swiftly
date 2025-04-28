@@ -40,11 +40,19 @@ extension SystemCommand {
             )
         }
 
-        public func read(path: FilePath? = nil, keys: [String]) -> ReadCommand {
-            ReadCommand(dscl: self, path: path, keys: keys)
+        public func read(keys: [String]) -> ReadCommand {
+            ReadCommand(dscl: self, path: nil, keys: keys)
         }
 
-        public func read(path: FilePath? = nil, keys: String...) -> ReadCommand {
+        public func read(keys: String...) -> ReadCommand {
+            self.read(keys: keys)
+        }
+
+        public func read(path: borrowing InFile, keys: [String]) -> ReadCommand {
+            ReadCommand(dscl: self, path: path.path, keys: keys)
+        }
+
+        public func read(path: borrowing InFile, keys: String...) -> ReadCommand {
             self.read(path: path, keys: keys)
         }
 
@@ -131,6 +139,10 @@ extension SystemCommand {
             var lipo: LipoCommand
             var output: FilePath
 
+            public var outputFile: FilePath {
+                self.output
+            }
+
             init(_ lipo: LipoCommand, output: FilePath) {
                 self.lipo = lipo
                 self.output = output
@@ -139,7 +151,9 @@ extension SystemCommand {
             public func config() -> Configuration {
                 var c = self.lipo.config()
 
-                var args = c.arguments.storage.map(\.description) + ["-create", "-output", "\(self.output)"]
+                var args = c.arguments.storage.map(\.description)
+
+                args += ["-create", "-output", "\(self.output)"]
 
                 c.arguments = .init(args)
 
@@ -149,4 +163,14 @@ extension SystemCommand {
     }
 }
 
-extension SystemCommand.LipoCommand.CreateCommand: Runnable {}
+extension SystemCommand {
+    public static func lipo(executable: Executable = LipoCommand.defaultExecutable, _ file1: borrowing InFile) -> LipoCommand {
+        Self.lipo(executable: executable, inputFiles: [file1.path])
+    }
+
+    public static func lipo(executable: Executable = LipoCommand.defaultExecutable, _ file1: borrowing InFile, _ file2: borrowing InFile) -> LipoCommand {
+        Self.lipo(executable: executable, inputFiles: [file1.path, file2.path])
+    }
+}
+
+extension SystemCommand.LipoCommand.CreateCommand: MakeFile {}

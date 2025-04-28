@@ -25,9 +25,10 @@ public struct Config: Codable, Equatable, Sendable {
 
     /// Read the config file from disk.
     public static func load(_ ctx: SwiftlyCoreContext) async throws -> Config {
+        let configFile = Swiftly.currentPlatform.swiftlyConfigFile(ctx)
+
         do {
-            let configFile = Swiftly.currentPlatform.swiftlyConfigFile(ctx)
-            let data = try await fs.cat(atPath: configFile)
+            let data = try await fs.cat(file: configFile)
             var config = try JSONDecoder().decode(Config.self, from: data)
             if config.version == nil {
                 // Assume that the version of swiftly is 0.3.0 because that is the last
@@ -37,7 +38,7 @@ public struct Config: Codable, Equatable, Sendable {
             return config
         } catch {
             let msg = """
-            Could not load swiftly's configuration file at \(Swiftly.currentPlatform.swiftlyConfigFile(ctx)).
+            Could not load swiftly's configuration file at \(configFile.path).
 
             To begin using swiftly you can install it: '\(CommandLine.arguments[0]) init'.
             """
@@ -48,7 +49,7 @@ public struct Config: Codable, Equatable, Sendable {
     /// Write the contents of this `Config` struct to disk.
     public func save(_ ctx: SwiftlyCoreContext) throws {
         let outData = try Self.makeEncoder().encode(self)
-        try outData.write(to: Swiftly.currentPlatform.swiftlyConfigFile(ctx), options: .atomic)
+        _ = try outData.write(to: OutFile(Swiftly.currentPlatform.swiftlyConfigFile(ctx).path), options: .atomic)
     }
 
     public func listInstalledToolchains(selector: ToolchainSelector?) -> [ToolchainVersion] {

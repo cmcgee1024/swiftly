@@ -186,8 +186,8 @@ struct Install: SwiftlyCommand {
         await ctx.print("Installing \(version)")
 
         let tmpFile = fs.mktemp()
-        try await fs.create(file: tmpFile, contents: nil)
-        return try await fs.withTemporary(files: tmpFile) {
+        guard let tmpFile = try await fs.create(file: tmpFile, contents: nil) else { throw SwiftlyError(message: "No temporary file") }
+        return try await fs.withTemporary(files: tmpFile.path) {
             var platformString = config.platform.name
             var platformFullString = config.platform.nameFull
 
@@ -231,7 +231,7 @@ struct Install: SwiftlyCommand {
 
             do {
                 try await ctx.httpClient.getSwiftToolchainFile(toolchainFile).download(
-                    to: tmpFile,
+                    to: tmpFile.path,
                     reportProgress: { progress in
                         let now = Date()
 
@@ -279,15 +279,15 @@ struct Install: SwiftlyCommand {
                 // Ensure swiftly doesn't overwrite any existing executables without getting confirmation first.
                 let swiftlyBinDir = Swiftly.currentPlatform.swiftlyBinDir(ctx)
                 let swiftlyBinDirContents =
-                    (try? await fs.ls(atPath: swiftlyBinDir)) ?? [String]()
+                    (try? await fs.ls(file: swiftlyBinDir)) ?? [String]()
                 let toolchainBinDir = Swiftly.currentPlatform.findToolchainBinDir(ctx, version)
-                let toolchainBinDirContents = try await fs.ls(atPath: toolchainBinDir)
+                let toolchainBinDirContents = try await fs.ls(file: toolchainBinDir)
 
                 var existingProxies: [String] = []
 
                 for bin in swiftlyBinDirContents {
                     do {
-                        let linkTarget = try await fs.readlink(atPath: swiftlyBinDir / bin)
+                        let linkTarget = try await fs.readlink(file: swiftlyBinDir / bin)
                         if linkTarget == proxyTo {
                             existingProxies.append(bin)
                         }
@@ -300,7 +300,7 @@ struct Install: SwiftlyCommand {
                     await ctx.print("The following existing executables will be overwritten:")
 
                     for executable in overwrite {
-                        await ctx.print("  \(swiftlyBinDir / executable)")
+                        await ctx.print("  \((swiftlyBinDir / executable).path)")
                     }
 
                     guard await ctx.promptForConfirmation(defaultBehavior: false) else {
@@ -317,12 +317,9 @@ struct Install: SwiftlyCommand {
 
                 for p in proxiesToCreate {
                     let proxy = Swiftly.currentPlatform.swiftlyBinDir(ctx) / p
+                    guard let proxy = try await fs.remove(file: proxy) else { throw SwiftlyError(message: "No proxy") }
 
-                    if try await fs.exists(atPath: proxy) {
-                        try await fs.remove(atPath: proxy)
-                    }
-
-                    try await fs.symlink(atPath: proxy, linkPath: proxyTo)
+                    _ = try await fs.symlink(atPath: proxy, linkPath: proxyTo)
 
                     pathChanged = true
                 }

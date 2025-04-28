@@ -79,7 +79,7 @@ struct Use: SwiftlyCommand {
 
             if self.printLocation {
                 // Print the toolchain location and exit
-                await ctx.print("\(Swiftly.currentPlatform.findToolchainLocation(ctx, selectedVersion))")
+                await ctx.print("\(Swiftly.currentPlatform.findToolchainLocation(ctx, selectedVersion).path)")
                 return
             }
 
@@ -152,17 +152,13 @@ struct Use: SwiftlyCommand {
         var cwd = ctx.currentDirectory
 
         while !cwd.isEmpty && !cwd.removingRoot().isEmpty {
-            guard try await fs.exists(atPath: cwd) else {
-                break
-            }
-
             let gitDir = cwd / ".git"
 
-            if try await fs.exists(atPath: gitDir) {
-                return cwd / ".swift-version"
+            if let cwd = try await fs.exists2(file: OutFile(gitDir)) {
+                return (cwd / ".swift-version").path
             }
 
-            cwd = cwd.removingLastComponent()
+            cwd = cwd.parent
         }
 
         return nil
@@ -199,13 +195,9 @@ public func selectToolchain(_ ctx: SwiftlyCoreContext, config: inout Config, glo
         var cwd = ctx.currentDirectory
 
         while !cwd.isEmpty && !cwd.removingRoot().isEmpty {
-            guard try await fs.exists(atPath: cwd) else {
-                break
-            }
-
             let svFile = cwd / ".swift-version"
 
-            if try await fs.exists(atPath: svFile) {
+            if let svFile = try await fs.exists2(file: OutFile(svFile))?.path {
                 let contents = try? String(contentsOf: svFile)
 
                 guard let contents else {
@@ -235,7 +227,7 @@ public func selectToolchain(_ ctx: SwiftlyCoreContext, config: inout Config, glo
                 return (selectedToolchain, .swiftVersionFile(svFile, selector, nil))
             }
 
-            cwd = cwd.removingLastComponent()
+            cwd = cwd.parent
         }
     }
 

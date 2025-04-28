@@ -24,7 +24,7 @@ struct SelfUpdate: SwiftlyCommand {
         try await validateSwiftly(ctx)
 
         let swiftlyBin = Swiftly.currentPlatform.swiftlyBinDir(ctx) / "swiftly"
-        guard try await fs.exists(atPath: swiftlyBin) else {
+        guard let _ = try await fs.exists2(file: OutFile(swiftlyBin.path)) else {
             throw SwiftlyError(
                 message:
                 "Self update doesn't work when swiftly has been installed externally. Please keep it updated from the source where you installed it in the first place."
@@ -77,15 +77,16 @@ struct SelfUpdate: SwiftlyCommand {
         await ctx.print("A new version is available: \(version)")
 
         let tmpFile = fs.mktemp()
-        try await fs.create(file: tmpFile, contents: nil)
-        return try await fs.withTemporary(files: tmpFile) {
+        guard let tmpFile = try await fs.create(file: tmpFile, contents: nil) else { throw SwiftlyError(message: "No temporary file") }
+
+        return try await fs.withTemporary(files: tmpFile.path) {
             let animation = PercentProgressAnimation(
                 stream: stdoutStream,
                 header: "Downloading swiftly \(version)"
             )
             do {
                 try await ctx.httpClient.getSwiftlyRelease(url: downloadURL).download(
-                    to: tmpFile,
+                    to: tmpFile.path,
                     reportProgress: { progress in
                         let downloadedMiB = Double(progress.receivedBytes) / (1024.0 * 1024.0)
                         let totalMiB = Double(progress.totalBytes!) / (1024.0 * 1024.0)
